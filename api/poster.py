@@ -293,9 +293,78 @@ def get_poster_from_url(url):
 # ==================== VERCEL HANDLER ====================
 
 class handler(BaseHTTPRequestHandler):
+    INDEX_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>OTT Poster API</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0a0a0a;color:#fff;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:40px 20px}
+.container{max-width:800px;width:100%}
+h1{font-size:2.5rem;margin-bottom:10px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.subtitle{color:#888;margin-bottom:40px;font-size:1.1rem}
+.search-box{display:flex;gap:10px;margin-bottom:20px}
+.search-box input{flex:1;padding:14px 20px;border:1px solid #333;border-radius:8px;background:#1a1a1a;color:#fff;font-size:1rem;outline:none}
+.search-box input:focus{border-color:#667eea}
+.search-box button{padding:14px 28px;border:none;border-radius:8px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;font-size:1rem;cursor:pointer;font-weight:600}
+.tab-bar{display:flex;gap:0;margin-bottom:20px}
+.tab{flex:1;padding:12px;text-align:center;background:#1a1a1a;border:1px solid #333;cursor:pointer;font-size:.9rem;color:#888;transition:all .2s}
+.tab:first-child{border-radius:8px 0 0 8px}.tab:last-child{border-radius:0 8px 8px 0}
+.tab.active{background:#667eea;color:#fff;border-color:#667eea}
+.results{display:flex;flex-direction:column;gap:16px}
+.result-card{background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:20px;display:flex;gap:20px;align-items:center}
+.result-card img{width:120px;height:80px;object-fit:cover;border-radius:8px;background:#222}
+.result-info{flex:1}.result-title{font-size:1.1rem;font-weight:600;margin-bottom:6px}
+.result-source{font-size:.85rem;color:#888;text-transform:uppercase;letter-spacing:1px}
+.result-url{font-size:.75rem;color:#667eea;word-break:break-all;margin-top:8px}
+.platforms{display:flex;gap:10px;margin-bottom:30px;flex-wrap:wrap}
+.platform-badge{padding:6px 14px;border-radius:20px;background:#1a1a1a;border:1px solid #333;font-size:.85rem;color:#aaa}
+.api-info{background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:20px;margin-top:30px}
+.api-info h3{margin-bottom:12px;color:#667eea}
+.api-info code{background:#0a0a0a;padding:2px 8px;border-radius:4px;font-size:.9rem;color:#e0e0e0}
+.api-info p{margin:8px 0;color:#aaa}
+.loading{text-align:center;padding:40px;color:#888}
+.error{text-align:center;padding:20px;color:#ff6b6b}
+.examples code{display:block;margin:4px 0;font-size:.8rem;color:#666}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>OTT Poster API</h1>
+<p class="subtitle">Search by name or paste OTT URL to get poster</p>
+<div class="platforms"><span class="platform-badge">Netflix</span><span class="platform-badge">Prime Video</span><span class="platform-badge">ZEE5</span><span class="platform-badge">Apple TV</span></div>
+<div class="tab-bar"><div class="tab active" onclick="switchTab('search')">Search by Name</div><div class="tab" onclick="switchTab('url')">Paste OTT URL</div></div>
+<div class="search-box"><input type="text" id="searchInput" placeholder="Money Heist, Sacred Games, Gullak..."/><button onclick="search()">Get Poster</button></div>
+<div id="results" class="results"></div>
+<div class="api-info"><h3>API Usage</h3>
+<p><strong>Search by name:</strong></p><code>GET /api/poster?q=Money+Heist</code>
+<p><strong>Paste OTT URL:</strong></p><code>GET /api/poster?url=https://www.netflix.com/title/81040344</code>
+<div class="examples"><p style="margin-top:12px"><strong>Supported URLs:</strong></p>
+<code>netflix.com/title/81040344</code>
+<code>primevideo.com/detail/XYZ123/...</code>
+<code>zee5.com/tv-shows/details/show/0-0-12345</code>
+<code>tv.apple.com/in/show/slug/umc.xxx</code></div></div>
+</div>
+<script>
+let mode='search';
+document.getElementById('searchInput').addEventListener('keypress',e=>{if(e.key==='Enter')search()});
+function switchTab(m){mode=m;document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));event.target.classList.add('active');document.getElementById('searchInput').placeholder=m==='url'?'Paste Netflix/Prime/ZEE5 URL...':'Money Heist, Sacred Games, Gullak...';document.getElementById('searchInput').value=''}
+async function search(){const q=document.getElementById('searchInput').trim();if(!q)return;const rd=document.getElementById('results');rd.innerHTML='<div class="loading">Fetching poster...</div>';try{let url;if(mode==='url'||q.includes('netflix.com')||q.includes('primevideo.com')||q.includes('zee5.com')||q.includes('tv.apple.com')){url='/api/poster?url='+encodeURIComponent(q)}else{url='/api/poster?q='+encodeURIComponent(q)}const res=await fetch(url);const data=await res.json();if(!data.results.length){rd.innerHTML='<div class="error">No poster found</div>';return}rd.innerHTML=data.results.map(r=>'<div class="result-card"><img src="'+r.poster_url+'" alt="'+r.title+'" onerror="this.style.display=\'none\'"/><div class="result-info"><div class="result-title">'+r.title+'</div><div class="result-source">'+r.source+'</div><div class="result-url">'+r.poster_url+'</div></div></div>').join('')}catch(e){rd.innerHTML='<div class="error">Error fetching poster</div>'}}
+</script>
+</body>
+</html>"""
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(parsed.query)
+
+        if parsed.path == "/":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            self.wfile.write(self.INDEX_HTML.encode())
+            return
 
         if parsed.path == "/api/poster":
             query = params.get("q", [""])[0]

@@ -12,11 +12,8 @@
       "dest": "/api/poster.py"
     },
     {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "src": "/",
+      "dest": "/api/poster.py"
     }
   ]
 }
