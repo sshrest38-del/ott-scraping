@@ -1,31 +1,20 @@
 """
-OTT Poster API - Vercel Serverless Function
-Netflix, SonyLIV, Apple TV + URL support
-Usage:
-  /api/poster?q=Money+Heist          → search by name
-  /api/poster?url=https://netflix.com/title/81040344  → extract from URL
+OTT Poster API - Local Version
+Netflix, SonyLIV, Prime Video, ZEE5, Apple TV
+Search by name or paste OTT URL
 """
 
+import requests
 import json
 import re
 import base64
 import urllib.parse
 from datetime import datetime, timezone
-from http.server import BaseHTTPRequestHandler
-
-try:
-    import requests
-except ImportError:
-    requests = None
-
-try:
-    from curl_cffi import requests as cffi_requests
-except Exception:
-    cffi_requests = None
+from curl_cffi import requests as cffi_requests
 
 
 def get_req():
-    return cffi_requests if cffi_requests else requests
+    return cffi_requests
 
 
 # ==================== NETFLIX ====================
@@ -59,7 +48,6 @@ NETFLIX_IDS = {
 
 
 def netflix_graphql(video_id):
-    """Netflix GraphQL API se poster fetch karo by video ID"""
     try:
         payload = {
             "operationName": "MiniModalQuery",
@@ -74,30 +62,24 @@ def netflix_graphql(video_id):
             },
             "extensions": {"persistedQuery": {"id": MINI_MODAL_ID, "version": MINI_MODAL_VERSION}},
         }
-
-        req = get_req()
-        r = req.post(GRAPHQL_URL, json=payload, timeout=15)
+        r = cffi_requests.post(GRAPHQL_URL, json=payload, timeout=15)
         r.raise_for_status()
         entities = r.json().get("data", {}).get("unifiedEntities", [])
         if not entities or not entities[0]:
             return None
-
         entity = entities[0]
         title = entity.get("title", "")
         year = entity.get("latestYear", "")
         boxart = entity.get("boxartHighRes", {})
         url = boxart.get("url", "") if isinstance(boxart, dict) else ""
-
         if not url:
             return None
-
         return {"title": title, "year": year, "poster_url": url, "source": "netflix"}
-    except Exception:
+    except:
         return None
 
 
 def netflix_poster(query):
-    """Netflix - search by name"""
     vid = NETFLIX_IDS.get(query.lower().strip())
     if not vid:
         return None
@@ -105,9 +87,6 @@ def netflix_poster(query):
 
 
 def netflix_from_url(url):
-    """Netflix URL se video ID extract karo"""
-    # https://www.netflix.com/title/81040344
-    # https://www.netflix.com/watch/81040344
     match = re.search(r"netflix\.com/(?:title|watch)/(\d+)", url)
     if match:
         return netflix_graphql(match.group(1))
@@ -117,62 +96,47 @@ def netflix_from_url(url):
 # ==================== SONYLIV ====================
 
 def sonyliv_poster(query):
-    """SonyLIV - search by name"""
     try:
-        r = get_req().get(
+        r = cffi_requests.get(
             "https://apiv3.sonyliv.com/AGL/4.8/A/ENG/WEB/IN/HR/TRAY/SEARCH",
             params={"query": query, "from": "0", "to": "10", "app_version": "3.10.3"},
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "application/json",
-            },
+            headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
             timeout=15
         )
         if r.status_code != 200:
             return None
-
         data = r.json()
         containers = data.get("resultObj", {}).get("containers", [])
         if not containers:
             return None
-
         tabs = containers[0].get("containers", [])
         if not tabs:
             return None
-
         assets = tabs[0].get("assets", [])
         if not assets:
             return None
-
         asset = assets[0]
         metadata = asset.get("metadata", {})
         title = metadata.get("title", "") or metadata.get("title_hin", "") or query
-
         query_lower = query.lower().strip()
         title_lower = title.lower().strip()
         if query_lower not in title_lower and title_lower not in query_lower:
             return None
-
         emf = metadata.get("emfAttributes", {})
         poster = emf.get("apv_poster_art", "") or emf.get("apv_cover_art", "") or emf.get("img_cover_3840_2160", "")
-
         if poster:
             return {"title": title, "poster_url": poster, "source": "sonyliv"}
-    except Exception:
+    except:
         pass
     return None
 
 
 def sonyliv_from_url(url):
-    """SonyLIV URL se content ID extract karo"""
-    # https://www.sonyliv.com/detail/1700000292
-    # https://www.sonyliv.com/detail/some-show/1700000292
     match = re.search(r"sonyliv\.com/detail/(?:[^/]+/)?(\d+)", url)
     if match:
         cid = match.group(1)
         try:
-            # Try search with the content ID
-            r = get_req().get(
+            r = cffi_requests.get(
                 "https://apiv3.sonyliv.com/AGL/4.8/A/ENG/WEB/IN/HR/TRAY/SEARCH",
                 params={"query": cid, "from": "0", "to": "10", "app_version": "3.10.3"},
                 headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
@@ -194,29 +158,48 @@ def sonyliv_from_url(url):
                                     poster = emf.get("apv_poster_art", "") or emf.get("apv_cover_art", "")
                                     if poster:
                                         return {"title": title, "poster_url": poster, "source": "sonyliv"}
-
-            # Fallback: use gwapi directly
-            for ctype in ["bundle", "show", "movie"]:
-                api = f"https://gwapi.zee5.com/content/{ctype}/{cid}?translation=en&country=IN"
-                r2 = get_req().get(api, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-                if r2.status_code == 200:
-                    data = r2.json()
-                    title = data.get("title", "") or data.get("name", "")
-                    images = data.get("image", {})
-                    poster = images.get("apv_poster_art", "") or images.get("poster", "")
-                    if poster:
-                        return {"title": title, "poster_url": poster, "source": "sonyliv"}
-        except Exception:
+        except:
             pass
     return None
 
 
-# ==================== AMAZON PRIME VIDEO ====================
+# ==================== PRIME VIDEO ====================
+
+def prime_poster(query):
+    try:
+        r = cffi_requests.get(
+            f"https://www.primevideo.com/search/ref=at_dp_mk_tv_ns?phrase={query}",
+            headers={"User-Agent": "Mozilla/5.0"}, timeout=15
+        )
+        ids = list(set(re.findall(r"/detail/([A-Z0-9]+)", r.text)))
+        for did in ids[:15]:
+            try:
+                api = f"https://www.primevideo.com/detail/{did}?dvWebAppClientVersion=1.0.125203.0"
+                r2 = cffi_requests.get(api, headers={
+                    "Accept": "application/json", "User-Agent": "Mozilla/5.0",
+                    "x-requested-with": "WebAppSPA"
+                }, timeout=10)
+                if r2.status_code == 200:
+                    data = r2.json()
+                    page = data.get("body", [])
+                    if page:
+                        hd = page.get("atf", {}).get("state", {}).get("detail", {}).get("headerDetail", {})
+                        for k, v in hd.items():
+                            title = v.get("title", "")
+                            year = v.get("releaseYear", "")
+                            images = v.get("images", {})
+                            if query.lower() in title.lower():
+                                poster = images.get("heroshot", "") or images.get("covershot", "")
+                                if poster:
+                                    return {"title": f"{title} ({year})", "poster_url": poster, "source": "prime_video"}
+            except:
+                pass
+    except:
+        pass
+    return None
+
 
 def prime_from_url(url):
-    """Prime Video URL se poster fetch karo"""
-    # https://www.primevideo.com/detail/0LC3EGV2SMFRLHNF/...
-    # https://www.amazon.com/dp/B0...
     match = re.search(r"primevideo\.com/detail/([A-Z0-9]+)", url)
     if not match:
         match = re.search(r"amazon\.(?:com|in)/dp/([A-Z0-9]+)", url)
@@ -224,7 +207,7 @@ def prime_from_url(url):
         did = match.group(1)
         try:
             api = f"https://www.primevideo.com/detail/{did}?dvWebAppClientVersion=1.0.125203.0"
-            r = get_req().get(api, headers={
+            r = cffi_requests.get(api, headers={
                 "Accept": "application/json", "User-Agent": "Mozilla/5.0",
                 "x-requested-with": "WebAppSPA"
             }, timeout=10)
@@ -240,7 +223,7 @@ def prime_from_url(url):
                         poster = images.get("heroshot", "") or images.get("covershot", "")
                         if poster:
                             return {"title": f"{title} ({year})" if year else title, "poster_url": poster, "source": "prime_video"}
-        except Exception:
+        except:
             pass
     return None
 
@@ -262,10 +245,39 @@ def zee5_token():
     return f"{h}.{p}.{SIGNATURE}"
 
 
+def zee5_poster(query):
+    try:
+        token = zee5_token()
+        r = cffi_requests.get(
+            f"https://www.zee5.com/search?q={query}",
+            headers={"User-Agent": "Mozilla/5.0"}, impersonate="chrome110", timeout=15
+        )
+        if r.status_code != 200:
+            return None
+        matches = re.findall(r"/(?:tv-shows|movies)/details/[^/]+/(\d+-\d+-\d+)", r.text)
+        if not matches:
+            return None
+        cid = matches[0]
+        for ctype in ["tvshow", "movie"]:
+            api = f"https://gwapi.zee5.com/content/{ctype}/{cid}?translation=en&country=IN"
+            r2 = cffi_requests.get(api, headers={"User-Agent": "Mozilla/5.0", "x-access-token": token}, timeout=10)
+            if r2.status_code == 200:
+                data = r2.json()
+                title = data.get("title", query)
+                images = data.get("image", {})
+                if query.lower() not in title.lower():
+                    continue
+                banner = images.get("4k_banner", "") or images.get("list", "")
+                if banner:
+                    img_type = "4k_banner" if images.get("4k_banner") else "list"
+                    url = f"{ZEE5_CDN}/{cid}/{img_type}/{banner}"
+                    return {"title": title, "poster_url": url, "source": "zee5"}
+    except:
+        pass
+    return None
+
+
 def zee5_from_url(url):
-    """ZEE5 URL se poster fetch karo"""
-    # https://www.zee5.com/tv-shows/details/some-show/0-0-35166
-    # https://www.zee5.com/movies/details/some-movie/0-0-12345
     match = re.search(r"zee5\.com/(?:tv-shows|movies)/details/[^/]+/(\d+-\d+-\d+)", url)
     if match:
         cid = match.group(1)
@@ -273,7 +285,7 @@ def zee5_from_url(url):
             token = zee5_token()
             for ctype in ["tvshow", "movie"]:
                 api = f"https://gwapi.zee5.com/content/{ctype}/{cid}?translation=en&country=IN"
-                r = get_req().get(api, headers={"User-Agent": "Mozilla/5.0", "x-access-token": token}, timeout=10)
+                r = cffi_requests.get(api, headers={"User-Agent": "Mozilla/5.0", "x-access-token": token}, timeout=10)
                 if r.status_code == 200:
                     data = r.json()
                     title = data.get("title", "")
@@ -282,7 +294,7 @@ def zee5_from_url(url):
                     if banner:
                         img_type = "4k_banner" if images.get("4k_banner") else "list"
                         return {"title": title, "poster_url": f"{ZEE5_CDN}/{cid}/{img_type}/{banner}", "source": "zee5"}
-        except Exception:
+        except:
             pass
     return None
 
@@ -290,15 +302,12 @@ def zee5_from_url(url):
 # ==================== APPLE TV ====================
 
 def appletv_poster(query):
-    """Apple TV - iTunes Search API"""
     try:
-        r = get_req().get(
+        r = cffi_requests.get(
             f"https://itunes.apple.com/search?term={urllib.parse.quote(query)}&country=in&media=all&limit=20",
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=10
+            headers={"User-Agent": "Mozilla/5.0"}, timeout=10
         )
         data = r.json()
-
         if data.get("resultCount", 0) > 0:
             for result in data["results"]:
                 name = result.get("trackName", result.get("collectionName", ""))
@@ -308,26 +317,20 @@ def appletv_poster(query):
                 if query.lower() in name.lower() or name.lower() in query.lower():
                     poster = result.get("artworkUrl600", "")
                     if poster:
-                        poster_hd = poster.replace("600x600", "1200x1200")
-                        return {"title": name, "poster_url": poster_hd, "source": "apple_tv"}
-
+                        return {"title": name, "poster_url": poster.replace("600x600", "1200x1200"), "source": "apple_tv"}
             for result in data["results"]:
                 kind = result.get("kind", "")
                 if kind not in ("podcast", "audiobook", "podcast-episode"):
                     name = result.get("trackName", result.get("collectionName", query))
                     poster = result.get("artworkUrl600", "")
                     if poster:
-                        poster_hd = poster.replace("600x600", "1200x1200")
-                        return {"title": name, "poster_url": poster_hd, "source": "apple_tv"}
-    except Exception:
+                        return {"title": name, "poster_url": poster.replace("600x600", "1200x1200"), "source": "apple_tv"}
+    except:
         pass
     return None
 
 
 def appletv_from_url(url):
-    """Apple TV URL se poster fetch karo"""
-    # https://tv.apple.com/in/show/some-show/umc.xxx
-    # https://itunes.apple.com/in/movie/some-movie/id123456
     match = re.search(r"(?:tv\.apple\.com|itunes\.apple\.com).+?/(?:show|movie)/([^/]+)", url)
     if match:
         slug = match.group(1).replace("-", " ")
@@ -338,129 +341,67 @@ def appletv_from_url(url):
 # ==================== URL DETECTION ====================
 
 def detect_platform_and_fetch(url):
-    """URL detect karo aur uss platform se poster fetch karo"""
     url_lower = url.lower()
-
     if "netflix.com" in url_lower:
         result = netflix_from_url(url)
         if result:
             return [result]
-
     if "sonyliv.com" in url_lower:
         result = sonyliv_from_url(url)
         if result:
             return [result]
-
     if "primevideo.com" in url_lower or "amazon." in url_lower:
         result = prime_from_url(url)
         if result:
             return [result]
-
     if "zee5.com" in url_lower:
         result = zee5_from_url(url)
         if result:
             return [result]
-
     if "tv.apple.com" in url_lower or "itunes.apple.com" in url_lower:
         result = appletv_from_url(url)
         if result:
             return [result]
-
     return []
 
 
 # ==================== MAIN API ====================
 
 def get_poster(query):
-    """Search by name - sabhi platforms se"""
     results = []
-    scrapers = [netflix_poster, sonyliv_poster, appletv_poster]
-    for scraper in scrapers:
+    for scraper in [netflix_poster, prime_poster, zee5_poster, sonyliv_poster, appletv_poster]:
         try:
             result = scraper(query)
             if result:
                 results.append(result)
-        except Exception:
+        except:
             pass
     return results
 
 
 def get_poster_from_url(url):
-    """URL se poster fetch karo"""
     return detect_platform_and_fetch(url)
 
 
-# ==================== VERCEL HANDLER ====================
+if __name__ == "__main__":
+    import sys
+    args = sys.argv[1:]
+    if not args:
+        args = ["Money Heist", "Sacred Games", "Gullak", "https://www.netflix.com/title/81040344"]
 
-class handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        parsed = urllib.parse.urlparse(self.path)
-        params = urllib.parse.parse_qs(parsed.query)
+    for arg in args:
+        print(f"\n{'='*60}")
+        print(f"  {arg}")
+        print(f"{'='*60}")
 
-        if parsed.path == "/api/poster":
-            query = params.get("q", [""])[0]
-            url = params.get("url", [""])[0]
-
-            if not query and not url:
-                self.send_response(400)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.end_headers()
-                self.wfile.write(json.dumps({
-                    "error": "Provide 'q' for search or 'url' for OTT link",
-                    "usage": {
-                        "search": "/api/poster?q=Money+Heist",
-                        "url": "/api/poster?url=https://www.netflix.com/title/81040344"
-                    }
-                }).encode())
-                return
-
-            if url:
-                results = get_poster_from_url(url)
-            else:
-                results = get_poster(query)
-
-            response = {
-                "query": query or url,
-                "results": results,
-                "total": len(results)
-            }
-
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            self.wfile.write(json.dumps(response, ensure_ascii=False).encode())
-
-        elif parsed.path == "/api/health":
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            self.wfile.write(json.dumps({
-                "status": "ok",
-                "platforms": ["netflix", "sonyliv", "prime_video", "zee5", "apple_tv"],
-                "usage": {
-                    "search": "/api/poster?q=Money+Heist",
-                    "netflix_url": "/api/poster?url=https://www.netflix.com/title/81040344",
-                    "sonyliv_url": "/api/poster?url=https://www.sonyliv.com/detail/1700000292",
-                    "prime_url": "/api/poster?url=https://www.primevideo.com/detail/XYZ123/...",
-                    "zee5_url": "/api/poster?url=https://www.zee5.com/tv-shows/details/show/0-0-12345"
-                }
-            }).encode())
-
+        if arg.startswith("http"):
+            results = get_poster_from_url(arg)
         else:
-            self.send_response(404)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"error": "Not found"}).encode())
+            results = get_poster(arg)
 
-    def do_OPTIONS(self):
-        self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.end_headers()
-
-    def log_message(self, format, *args):
-        pass
+        if results:
+            for r in results:
+                print(f"  [{r['source'].upper()}] {r['title']}")
+                print(f"  {r['poster_url'][:100]}")
+        else:
+            print("  Not found")
