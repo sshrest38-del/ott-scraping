@@ -335,7 +335,7 @@ h1{font-size:2.5rem;margin-bottom:10px;background:linear-gradient(135deg,#667eea
 <p class="subtitle">Search by name or paste OTT URL to get poster</p>
 <div class="platforms"><span class="platform-badge">Netflix</span><span class="platform-badge">Prime Video</span><span class="platform-badge">ZEE5</span><span class="platform-badge">Apple TV</span></div>
 <div class="tab-bar"><div class="tab active" onclick="switchTab('search')">Search by Name</div><div class="tab" onclick="switchTab('url')">Paste OTT URL</div></div>
-<div class="search-box"><input type="text" id="searchInput" placeholder="Money Heist, Sacred Games, Gullak..."/><button onclick="search()">Get Poster</button></div>
+<div class="search-box"><input type="text" id="searchInput" placeholder="Money Heist, Sacred Games, Gullak..."/><button id="searchBtn" onclick="search()">Get Poster</button></div>
 <div id="results" class="results"></div>
 <div class="api-info"><h3>API Usage</h3>
 <p><strong>Search by name:</strong></p><code>GET /api/poster?q=Money+Heist</code>
@@ -349,14 +349,9 @@ h1{font-size:2.5rem;margin-bottom:10px;background:linear-gradient(135deg,#667eea
 <script>
 let mode='search';
 const inp=document.getElementById('searchInput');
-inp.addEventListener('keypress',e=>{if(e.key==='Enter')search()});
-inp.addEventListener('input',function(){
-const v=this.value.trim();
-if(v.includes('netflix.com')||v.includes('primevideo.com')||v.includes('zee5.com')||v.includes('tv.apple.com')||v.includes('amazon.')){mode='url';document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab')[1].classList.add('active');this.placeholder='Paste Netflix/Prime/ZEE5 URL...'}
-else if(mode==='url'){mode='search';document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab')[0].classList.add('active');this.placeholder='Money Heist, Sacred Games, Gullak...'}
-});
-function switchTab(m){mode=m;const tabs=document.querySelectorAll('.tab');tabs.forEach(t=>t.classList.remove('active'));if(m==='search'){tabs[0].classList.add('active');inp.placeholder='Money Heist, Sacred Games, Gullak...';inp.type='text'}else{tabs[1].classList.add('active');inp.placeholder='Paste Netflix/Prime/ZEE5 URL...';inp.type='url'}inp.value='';inp.focus()}
-async function search(){const q=inp.value.trim();if(!q)return;const rd=document.getElementById('results');rd.innerHTML='<div class="loading">Fetching poster...</div>';try{let url;if(q.includes('netflix.com')||q.includes('primevideo.com')||q.includes('zee5.com')||q.includes('tv.apple.com')||q.includes('amazon.')){url='/api/poster?url='+encodeURIComponent(q)}else{url='/api/poster?q='+encodeURIComponent(q)}const res=await fetch(url);const data=await res.json();if(!data.results.length){rd.innerHTML='<div class="error">No poster found</div>';return}rd.innerHTML=data.results.map(r=>'<div class="result-card"><img src="'+r.poster_url+'" alt="'+r.title+'" onerror="this.style.display=\'none\'"/><div class="result-info"><div class="result-title">'+r.title+'</div><div class="result-source">'+r.source+'</div><div class="result-url">'+r.poster_url+'</div></div></div>').join('')}catch(e){rd.innerHTML='<div class="error">Error fetching poster</div>'}}
+inp.addEventListener('keypress',function(e){if(e.key==='Enter')search()});
+function switchTab(m){mode=m;var tabs=document.querySelectorAll('.tab');tabs[0].className=m==='search'?'tab active':'tab';tabs[1].className=m==='url'?'tab active':'tab';inp.placeholder=m==='url'?'Paste Netflix/Prime/ZEE5 URL...':'Money Heist, Sacred Games, Gullak...';inp.value='';inp.focus()}
+async function search(){var q=inp.value.trim();if(!q)return;var rd=document.getElementById('results');rd.innerHTML='<div class="loading">Fetching poster...</div>';try{var url;if(q.indexOf('netflix.com')>-1||q.indexOf('primevideo.com')>-1||q.indexOf('zee5.com')>-1||q.indexOf('tv.apple.com')>-1||q.indexOf('amazon.')>-1){url='/api/poster?url='+encodeURIComponent(q)}else{url='/api/poster?q='+encodeURIComponent(q)}var res=await fetch(url);var data=await res.json();if(!data.results.length){rd.innerHTML='<div class="error">No poster found</div>';return}rd.innerHTML=data.results.map(function(r){return '<div class="result-card"><img src="'+r.poster_url+'" alt="'+r.title+'" onerror="this.style.display=\'none\'"/><div class="result-info"><div class="result-title">'+r.title+'</div><div class="result-source">'+r.source+'</div><div class="result-url">'+r.poster_url+'</div></div></div>'}).join('')}catch(e){rd.innerHTML='<div class="error">Error: '+e.message+'</div>'}}
 </script>
 </body>
 </html>"""
