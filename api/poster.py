@@ -114,101 +114,6 @@ def netflix_from_url(url):
     return None
 
 
-# ==================== SONYLIV ====================
-
-def sonyliv_poster(query):
-    """SonyLIV - search by name"""
-    try:
-        r = get_req().get(
-            "https://apiv3.sonyliv.com/AGL/4.8/A/ENG/WEB/IN/HR/TRAY/SEARCH",
-            params={"query": query, "from": "0", "to": "10", "app_version": "3.10.3"},
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "application/json",
-            },
-            timeout=15
-        )
-        if r.status_code != 200:
-            return None
-
-        data = r.json()
-        containers = data.get("resultObj", {}).get("containers", [])
-        if not containers:
-            return None
-
-        tabs = containers[0].get("containers", [])
-        if not tabs:
-            return None
-
-        assets = tabs[0].get("assets", [])
-        if not assets:
-            return None
-
-        asset = assets[0]
-        metadata = asset.get("metadata", {})
-        title = metadata.get("title", "") or metadata.get("title_hin", "") or query
-
-        query_lower = query.lower().strip()
-        title_lower = title.lower().strip()
-        if query_lower not in title_lower and title_lower not in query_lower:
-            return None
-
-        emf = metadata.get("emfAttributes", {})
-        poster = emf.get("apv_poster_art", "") or emf.get("apv_cover_art", "") or emf.get("img_cover_3840_2160", "")
-
-        if poster:
-            return {"title": title, "poster_url": poster, "source": "sonyliv"}
-    except Exception:
-        pass
-    return None
-
-
-def sonyliv_from_url(url):
-    """SonyLIV URL se content ID extract karo"""
-    # https://www.sonyliv.com/detail/1700000292
-    # https://www.sonyliv.com/detail/some-show/1700000292
-    match = re.search(r"sonyliv\.com/detail/(?:[^/]+/)?(\d+)", url)
-    if match:
-        cid = match.group(1)
-        try:
-            # Try search with the content ID
-            r = get_req().get(
-                "https://apiv3.sonyliv.com/AGL/4.8/A/ENG/WEB/IN/HR/TRAY/SEARCH",
-                params={"query": cid, "from": "0", "to": "10", "app_version": "3.10.3"},
-                headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
-                timeout=15
-            )
-            if r.status_code == 200:
-                data = r.json()
-                containers = data.get("resultObj", {}).get("containers", [])
-                if containers:
-                    tabs = containers[0].get("containers", [])
-                    if tabs:
-                        assets = tabs[0].get("assets", [])
-                        if assets:
-                            for asset in assets:
-                                if str(asset.get("contentId", "")) == cid:
-                                    metadata = asset.get("metadata", {})
-                                    title = metadata.get("title", "")
-                                    emf = metadata.get("emfAttributes", {})
-                                    poster = emf.get("apv_poster_art", "") or emf.get("apv_cover_art", "")
-                                    if poster:
-                                        return {"title": title, "poster_url": poster, "source": "sonyliv"}
-
-            # Fallback: use gwapi directly
-            for ctype in ["bundle", "show", "movie"]:
-                api = f"https://gwapi.zee5.com/content/{ctype}/{cid}?translation=en&country=IN"
-                r2 = get_req().get(api, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-                if r2.status_code == 200:
-                    data = r2.json()
-                    title = data.get("title", "") or data.get("name", "")
-                    images = data.get("image", {})
-                    poster = images.get("apv_poster_art", "") or images.get("poster", "")
-                    if poster:
-                        return {"title": title, "poster_url": poster, "source": "sonyliv"}
-        except Exception:
-            pass
-    return None
 
 
 # ==================== AMAZON PRIME VIDEO ====================
@@ -346,11 +251,6 @@ def detect_platform_and_fetch(url):
         if result:
             return [result]
 
-    if "sonyliv.com" in url_lower:
-        result = sonyliv_from_url(url)
-        if result:
-            return [result]
-
     if "primevideo.com" in url_lower or "amazon." in url_lower:
         result = prime_from_url(url)
         if result:
@@ -374,7 +274,7 @@ def detect_platform_and_fetch(url):
 def get_poster(query):
     """Search by name - sabhi platforms se"""
     results = []
-    scrapers = [netflix_poster, sonyliv_poster, appletv_poster]
+    scrapers = [netflix_poster, appletv_poster]
     for scraper in scrapers:
         try:
             result = scraper(query)
@@ -439,11 +339,10 @@ class handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({
                 "status": "ok",
-                "platforms": ["netflix", "sonyliv", "prime_video", "zee5", "apple_tv"],
+                "platforms": ["netflix", "prime_video", "zee5", "apple_tv"],
                 "usage": {
                     "search": "/api/poster?q=Money+Heist",
                     "netflix_url": "/api/poster?url=https://www.netflix.com/title/81040344",
-                    "sonyliv_url": "/api/poster?url=https://www.sonyliv.com/detail/1700000292",
                     "prime_url": "/api/poster?url=https://www.primevideo.com/detail/XYZ123/...",
                     "zee5_url": "/api/poster?url=https://www.zee5.com/tv-shows/details/show/0-0-12345"
                 }
