@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "outputDirectory": "public",
   "builds": [
     {
       "src": "api/poster.py",
@@ -11,6 +10,13 @@
     {
       "src": "/api/(.*)",
       "dest": "/api/poster.py"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ]
 }
