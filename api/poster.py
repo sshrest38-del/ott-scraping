@@ -1,13 +1,10 @@
 """
 OTT Poster API - Vercel Serverless Function
-Netflix, Prime Video, ZEE5, SonyLIV, Apple TV
+Netflix, SonyLIV, Apple TV
 """
 
 import json
-import re
-import base64
 import urllib.parse
-from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler
 
 try:
@@ -17,8 +14,12 @@ except ImportError:
 
 try:
     from curl_cffi import requests as cffi_requests
-except ImportError:
+except Exception:
     cffi_requests = None
+
+
+def get_req():
+    return cffi_requests if cffi_requests else requests
 
 
 # ==================== NETFLIX ====================
@@ -49,6 +50,8 @@ NETFLIX_IDS = {
     "farzi": "81695218", "guns and gulaabs": "81699082",
     "khakee": "81724320", "jubilee": "81635720",
     "nirmal pathak ki ghar wapsi": "81615608",
+    "scam 1992": "81655362", "gullak": "81380794",
+    "ted lasso": None,
 }
 
 
@@ -71,7 +74,7 @@ def netflix_poster(query):
         "extensions": {"persistedQuery": {"id": MINI_MODAL_ID, "version": MINI_MODAL_VERSION}},
     }
 
-    req = requests or cffi_requests
+    req = get_req()
     r = req.post(GRAPHQL_URL, json=payload, timeout=15)
     r.raise_for_status()
     entities = r.json().get("data", {}).get("unifiedEntities", [])
@@ -94,11 +97,11 @@ def netflix_poster(query):
 
 def sonyliv_poster(query):
     try:
-        req = cffi_requests or requests
+        req = get_req()
         r = req.get(
             "https://apiv3.sonyliv.com/AGL/4.8/A/ENG/WEB/IN/HR/TRAY/SEARCH",
             params={"query": query, "from": "0", "to": "10", "app_version": "3.10.3"},
-            headers={"User-Agent": "Mozilla/5.0"},
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
             timeout=15
         )
         if r.status_code != 200:
@@ -131,7 +134,7 @@ def sonyliv_poster(query):
 
         if poster:
             return {"title": title, "poster_url": poster, "source": "sonyliv"}
-    except:
+    except Exception:
         pass
     return None
 
@@ -140,8 +143,10 @@ def sonyliv_poster(query):
 
 def appletv_poster(query):
     try:
-        r = requests.get(
+        req = get_req()
+        r = req.get(
             f"https://itunes.apple.com/search?term={urllib.parse.quote(query)}&country=in&media=all&limit=20",
+            headers={"User-Agent": "Mozilla/5.0"},
             timeout=10
         )
         data = r.json()
@@ -150,7 +155,7 @@ def appletv_poster(query):
             for result in data["results"]:
                 name = result.get("trackName", result.get("collectionName", ""))
                 kind = result.get("kind", "")
-                if kind in ("podcast", "audiobook"):
+                if kind in ("podcast", "audiobook", "podcast-episode"):
                     continue
                 if query.lower() in name.lower() or name.lower() in query.lower():
                     poster = result.get("artworkUrl600", "")
@@ -160,13 +165,13 @@ def appletv_poster(query):
 
             for result in data["results"]:
                 kind = result.get("kind", "")
-                if kind not in ("podcast", "audiobook"):
+                if kind not in ("podcast", "audiobook", "podcast-episode"):
                     name = result.get("trackName", result.get("collectionName", query))
                     poster = result.get("artworkUrl600", "")
                     if poster:
                         poster_hd = poster.replace("600x600", "1200x1200")
                         return {"title": name, "poster_url": poster_hd, "source": "apple_tv"}
-    except:
+    except Exception:
         pass
     return None
 
@@ -176,17 +181,17 @@ def appletv_poster(query):
 def get_poster(query):
     results = []
     scrapers = [
-        ("Netflix", netflix_poster),
-        ("SonyLIV", sonyliv_poster),
-        ("Apple TV", appletv_poster),
+        netflix_poster,
+        sonyliv_poster,
+        appletv_poster,
     ]
 
-    for platform, scraper in scrapers:
+    for scraper in scrapers:
         try:
             result = scraper(query)
             if result:
                 results.append(result)
-        except:
+        except Exception:
             pass
 
     return results
