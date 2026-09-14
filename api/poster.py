@@ -348,9 +348,15 @@ h1{font-size:2.5rem;margin-bottom:10px;background:linear-gradient(135deg,#667eea
 </div>
 <script>
 let mode='search';
-document.getElementById('searchInput').addEventListener('keypress',e=>{if(e.key==='Enter')search()});
-function switchTab(m){mode=m;document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));event.target.classList.add('active');document.getElementById('searchInput').placeholder=m==='url'?'Paste Netflix/Prime/ZEE5 URL...':'Money Heist, Sacred Games, Gullak...';document.getElementById('searchInput').value=''}
-async function search(){const q=document.getElementById('searchInput').trim();if(!q)return;const rd=document.getElementById('results');rd.innerHTML='<div class="loading">Fetching poster...</div>';try{let url;if(mode==='url'||q.includes('netflix.com')||q.includes('primevideo.com')||q.includes('zee5.com')||q.includes('tv.apple.com')){url='/api/poster?url='+encodeURIComponent(q)}else{url='/api/poster?q='+encodeURIComponent(q)}const res=await fetch(url);const data=await res.json();if(!data.results.length){rd.innerHTML='<div class="error">No poster found</div>';return}rd.innerHTML=data.results.map(r=>'<div class="result-card"><img src="'+r.poster_url+'" alt="'+r.title+'" onerror="this.style.display=\'none\'"/><div class="result-info"><div class="result-title">'+r.title+'</div><div class="result-source">'+r.source+'</div><div class="result-url">'+r.poster_url+'</div></div></div>').join('')}catch(e){rd.innerHTML='<div class="error">Error fetching poster</div>'}}
+const inp=document.getElementById('searchInput');
+inp.addEventListener('keypress',e=>{if(e.key==='Enter')search()});
+inp.addEventListener('input',function(){
+const v=this.value.trim();
+if(v.includes('netflix.com')||v.includes('primevideo.com')||v.includes('zee5.com')||v.includes('tv.apple.com')||v.includes('amazon.')){mode='url';document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab')[1].classList.add('active');this.placeholder='Paste Netflix/Prime/ZEE5 URL...'}
+else if(mode==='url'){mode='search';document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab')[0].classList.add('active');this.placeholder='Money Heist, Sacred Games, Gullak...'}
+});
+function switchTab(m){mode=m;const tabs=document.querySelectorAll('.tab');tabs.forEach(t=>t.classList.remove('active'));if(m==='search'){tabs[0].classList.add('active');inp.placeholder='Money Heist, Sacred Games, Gullak...';inp.type='text'}else{tabs[1].classList.add('active');inp.placeholder='Paste Netflix/Prime/ZEE5 URL...';inp.type='url'}inp.value='';inp.focus()}
+async function search(){const q=inp.value.trim();if(!q)return;const rd=document.getElementById('results');rd.innerHTML='<div class="loading">Fetching poster...</div>';try{let url;if(q.includes('netflix.com')||q.includes('primevideo.com')||q.includes('zee5.com')||q.includes('tv.apple.com')||q.includes('amazon.')){url='/api/poster?url='+encodeURIComponent(q)}else{url='/api/poster?q='+encodeURIComponent(q)}const res=await fetch(url);const data=await res.json();if(!data.results.length){rd.innerHTML='<div class="error">No poster found</div>';return}rd.innerHTML=data.results.map(r=>'<div class="result-card"><img src="'+r.poster_url+'" alt="'+r.title+'" onerror="this.style.display=\'none\'"/><div class="result-info"><div class="result-title">'+r.title+'</div><div class="result-source">'+r.source+'</div><div class="result-url">'+r.poster_url+'</div></div></div>').join('')}catch(e){rd.innerHTML='<div class="error">Error fetching poster</div>'}}
 </script>
 </body>
 </html>"""
