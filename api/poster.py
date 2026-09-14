@@ -50,7 +50,7 @@ NETFLIX_IDS = {
     "farzi": "81695218", "guns and gulaabs": "81699082",
     "khakee": "81724320", "jubilee": "81635720",
     "nirmal pathak ki ghar wapsi": "81615608",
-    "scam 1992": "81655362", "gullak": "81380794",
+    "scam 1992": "81569424", "gullak": "81380794",
     "ted lasso": None,
 }
 
@@ -98,6 +98,7 @@ def netflix_poster(query):
 def sonyliv_poster(query):
     try:
         req = get_req()
+        lib = "curl_cffi" if cffi_requests else "requests"
         r = req.get(
             "https://apiv3.sonyliv.com/AGL/4.8/A/ENG/WEB/IN/HR/TRAY/SEARCH",
             params={"query": query, "from": "0", "to": "10", "app_version": "3.10.3"},
@@ -134,8 +135,10 @@ def sonyliv_poster(query):
 
         if poster:
             return {"title": title, "poster_url": poster, "source": "sonyliv"}
-    except Exception:
-        pass
+    except Exception as e:
+        # Log error but don't expose to user
+        import sys
+        print(f"SonyLIV error: {e}", file=sys.stderr)
     return None
 
 
@@ -233,6 +236,19 @@ class handler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps({"status": "ok", "platforms": ["netflix", "sonyliv", "apple_tv"]}).encode())
+
+        elif parsed.path == "/api/debug":
+            import sys
+            info = {
+                "python": sys.version,
+                "requests_available": requests is not None,
+                "curl_cffi_available": cffi_requests is not None,
+            }
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(info).encode())
 
         else:
             self.send_response(404)
