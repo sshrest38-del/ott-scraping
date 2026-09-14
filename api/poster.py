@@ -50,7 +50,7 @@ NETFLIX_IDS = {
     "farzi": "81695218", "guns and gulaabs": "81699082",
     "khakee": "81724320", "jubilee": "81635720",
     "nirmal pathak ki ghar wapsi": "81615608",
-    "scam 1992": "81569424", "gullak": "81380794",
+    "gullak": "81380794",
     "ted lasso": None,
 }
 
@@ -97,12 +97,14 @@ def netflix_poster(query):
 
 def sonyliv_poster(query):
     try:
-        req = get_req()
-        lib = "curl_cffi" if cffi_requests else "requests"
-        r = req.get(
+        r = requests.get(
             "https://apiv3.sonyliv.com/AGL/4.8/A/ENG/WEB/IN/HR/TRAY/SEARCH",
             params={"query": query, "from": "0", "to": "10", "app_version": "3.10.3"},
-            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "application/json",
+                "Accept-Language": "en-US,en;q=0.9",
+            },
             timeout=15
         )
         if r.status_code != 200:
@@ -136,7 +138,6 @@ def sonyliv_poster(query):
         if poster:
             return {"title": title, "poster_url": poster, "source": "sonyliv"}
     except Exception as e:
-        # Log error but don't expose to user
         import sys
         print(f"SonyLIV error: {e}", file=sys.stderr)
     return None
